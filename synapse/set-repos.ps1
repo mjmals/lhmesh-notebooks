@@ -6,7 +6,10 @@ param(
     [string] $RepositoryAccount,
 
     [Parameter(Mandatory = $true)]
-    [string] $RepositoryName
+    [string] $RepositoryName,
+
+    [Parameter(Mandatory = $true)]
+    [string] $BranchName
 )
 
 $workspaces = az synapse workspace list | ConvertFrom-Json
@@ -27,6 +30,6 @@ foreach($workspace in $workspaces)
             --account-name "$RepositoryAccount" `
             --repository-name "$RepositoryName" `
             --root-folder "/synapse" `
-            --collaboration-branch "synapse"
+            --collaboration-branch "$BranchName"
     }
 }

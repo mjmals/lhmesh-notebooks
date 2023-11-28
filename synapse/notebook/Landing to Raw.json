@@ -20,7 +20,7 @@
 				"spark.dynamicAllocation.enabled": "false",
 				"spark.dynamicAllocation.minExecutors": "2",
 				"spark.dynamicAllocation.maxExecutors": "2",
-				"spark.autotune.trackingId": "cd64a157-aad4-4b9b-b215-497f5bee0952"
+				"spark.autotune.trackingId": "c6cb5c56-d00c-465e-af5a-9aecd8242eef"
 			}
 		},
 		"metadata": {
@@ -54,9 +54,10 @@
 			{
 				"cell_type": "code",
 				"source": [
-					"import json"
+					"import json\r\n",
+					"from pyspark.sql.functions import *"
 				],
-				"execution_count": 7
+				"execution_count": 68
 			},
 			{
 				"cell_type": "code",
@@ -75,10 +76,11 @@
 					]
 				},
 				"source": [
-					"sourcePath = \"\"\r\n",
-					"destPath = \"\""
+					"sourcePath = \"forces\"\r\n",
+					"destPath = \"forces\"\r\n",
+					"fileFormat = \"json\""
 				],
-				"execution_count": 3
+				"execution_count": 40
 			},
 			{
 				"cell_type": "code",
@@ -94,9 +96,200 @@
 					}
 				},
 				"source": [
-					"storageAccountName = mssparkutils.credentials.getSecret(\"\", \"storageaccount-name\", \"lsDomainKeyvault\")"
+					"def GetSecretValue(secretName: str):\r\n",
+					"    return mssparkutils.credentials.getSecretWithLS(\"lsDomainKeyvault\", secretName)"
 				],
-				"execution_count": 6
+				"execution_count": 19
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"storageAccountName = GetSecretValue(\"storageaccount-name\")\r\n",
+					"sourceContainer = \"landing\"\r\n",
+					"sourceUri = f\"abfss://{sourceContainer}@{storageAccountName}.dfs.core.windows.net\"\r\n",
+					"sourceDataPath = f\"{sourceUri}/{sourcePath}\"\r\n",
+					"print(sourceDataPath)"
+				],
+				"execution_count": 73
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"fileList = []"
+				],
+				"execution_count": 62
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"def ListFiles(filePath: str):\r\n",
+					"    items = mssparkutils.fs.ls(filePath)\r\n",
+					"\r\n",
+					"    for item in items:\r\n",
+					"    \r\n",
+					"        itemName = item.name\r\n",
+					"        itemPath = item.path\r\n",
+					"        itemSize = item.size\r\n",
+					"\r\n",
+					"        if itemSize == 0:\r\n",
+					"            ListFiles(itemPath)\r\n",
+					"\r\n",
+					"        if itemName.endswith(f\".{fileFormat}\"):\r\n",
+					"            fileList.append(itemPath)"
+				],
+				"execution_count": 59
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"ListFiles(sourceDataPath)\r\n",
+					"print(fileList)"
+				],
+				"execution_count": 63
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					},
+					"collapsed": false
+				},
+				"source": [
+					"df = spark.read.format(fileFormat).load(fileList)\r\n",
+					"df = df.withColumn(\"_inputFileName\", expr(f\"REPLACE(input_file_name(), '{sourceUri}', '')\"))\r\n",
+					"display(df)"
+				],
+				"execution_count": 75
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"destContainer = \"bronze\"\r\n",
+					"destUri = f\"abfss://{destContainer}@{storageAccountName}.dfs.core.windows.net/{destPath}\"\r\n",
+					"destDataPath = f\"{destUri}/_data\"\r\n",
+					"destCheckpointPath = f\"{destUri}/_checkpoint\"\r\n",
+					"print(destDataPath)"
+				],
+				"execution_count": 81
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"df.write.format(\"delta\").mode(\"append\").save(destDataPath)"
+				],
+				"execution_count": 82
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"spark.sql(f\"CREATE DATABASE IF NOT EXISTS {destContainer}\")\r\n",
+					"spark.sql(f\"CREATE TABLE IF NOT EXISTS {destContainer}.{destPath} USING DELTA LOCATION '{destDataPath}'\")"
+				],
+				"execution_count": 84
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					},
+					"collapsed": false
+				},
+				"source": [
+					"dfTest = spark.sql(f\"SELECT * FROM {destContainer}.{destPath}\")\r\n",
+					"display(dfTest)"
+				],
+				"execution_count": 86
 			}
 		]
 	}
