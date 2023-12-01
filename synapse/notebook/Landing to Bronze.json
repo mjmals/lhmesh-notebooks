@@ -1,5 +1,5 @@
 {
-	"name": "Landing to Raw",
+	"name": "Landing to Bronze",
 	"properties": {
 		"folder": {
 			"name": "Raw"
@@ -20,7 +20,7 @@
 				"spark.dynamicAllocation.enabled": "false",
 				"spark.dynamicAllocation.minExecutors": "2",
 				"spark.dynamicAllocation.maxExecutors": "2",
-				"spark.autotune.trackingId": "c6cb5c56-d00c-465e-af5a-9aecd8242eef"
+				"spark.autotune.trackingId": "acefae51-d90f-481a-a03f-599c90e3f344"
 			}
 		},
 		"metadata": {
@@ -55,9 +55,10 @@
 				"cell_type": "code",
 				"source": [
 					"import json\r\n",
-					"from pyspark.sql.functions import *"
+					"from pyspark.sql.functions import *\r\n",
+					"from pyspark.sql.types import *"
 				],
-				"execution_count": 68
+				"execution_count": 88
 			},
 			{
 				"cell_type": "code",
@@ -80,7 +81,7 @@
 					"destPath = \"forces\"\r\n",
 					"fileFormat = \"json\""
 				],
-				"execution_count": 40
+				"execution_count": 89
 			},
 			{
 				"cell_type": "code",
@@ -99,7 +100,7 @@
 					"def GetSecretValue(secretName: str):\r\n",
 					"    return mssparkutils.credentials.getSecretWithLS(\"lsDomainKeyvault\", secretName)"
 				],
-				"execution_count": 19
+				"execution_count": 90
 			},
 			{
 				"cell_type": "code",
@@ -121,7 +122,7 @@
 					"sourceDataPath = f\"{sourceUri}/{sourcePath}\"\r\n",
 					"print(sourceDataPath)"
 				],
-				"execution_count": 73
+				"execution_count": 91
 			},
 			{
 				"cell_type": "code",
@@ -139,7 +140,7 @@
 				"source": [
 					"fileList = []"
 				],
-				"execution_count": 62
+				"execution_count": 92
 			},
 			{
 				"cell_type": "code",
@@ -170,7 +171,7 @@
 					"        if itemName.endswith(f\".{fileFormat}\"):\r\n",
 					"            fileList.append(itemPath)"
 				],
-				"execution_count": 59
+				"execution_count": 93
 			},
 			{
 				"cell_type": "code",
@@ -189,7 +190,7 @@
 					"ListFiles(sourceDataPath)\r\n",
 					"print(fileList)"
 				],
-				"execution_count": 63
+				"execution_count": 94
 			},
 			{
 				"cell_type": "code",
@@ -206,11 +207,16 @@
 					"collapsed": false
 				},
 				"source": [
-					"df = spark.read.format(fileFormat).load(fileList)\r\n",
-					"df = df.withColumn(\"_inputFileName\", expr(f\"REPLACE(input_file_name(), '{sourceUri}', '')\"))\r\n",
+					"df = spark.read.format(\"json\").load(sourceDataPath)\r\n",
+					"df = df.withColumn(\"_InputFileName\", expr(\"input_file_name()\"))\r\n",
+					"df = df.withColumn(\"_InputFileDate\", expr(\"CAST(CONCAT_WS('-', Year, Month, Day) AS DATE)\"))\r\n",
+					"#fileList = fileList[:-1]\r\n",
+					"print(fileList)\r\n",
+					"df = df.filter(col(\"_InputFileName\").isin(fileList))\r\n",
+					"df = df.withColumn(\"_InputFileName\",  expr(f\"REPLACE(_InputFileName, '{sourceUri}/', '')\"))\r\n",
 					"display(df)"
 				],
-				"execution_count": 75
+				"execution_count": 95
 			},
 			{
 				"cell_type": "code",
@@ -232,7 +238,7 @@
 					"destCheckpointPath = f\"{destUri}/_checkpoint\"\r\n",
 					"print(destDataPath)"
 				],
-				"execution_count": 81
+				"execution_count": 96
 			},
 			{
 				"cell_type": "code",
@@ -248,9 +254,16 @@
 					}
 				},
 				"source": [
-					"df.write.format(\"delta\").mode(\"append\").save(destDataPath)"
+					"\r\n",
+					"(\r\n",
+					"    df.write\r\n",
+					"    .format(\"delta\")\r\n",
+					"    .mode(\"append\")\r\n",
+					"    .partitionBy(\"_InputFileDate\")\r\n",
+					"    .save(destDataPath)\r\n",
+					")"
 				],
-				"execution_count": 82
+				"execution_count": 97
 			},
 			{
 				"cell_type": "code",
@@ -269,7 +282,7 @@
 					"spark.sql(f\"CREATE DATABASE IF NOT EXISTS {destContainer}\")\r\n",
 					"spark.sql(f\"CREATE TABLE IF NOT EXISTS {destContainer}.{destPath} USING DELTA LOCATION '{destDataPath}'\")"
 				],
-				"execution_count": 84
+				"execution_count": 98
 			},
 			{
 				"cell_type": "code",
@@ -289,7 +302,7 @@
 					"dfTest = spark.sql(f\"SELECT * FROM {destContainer}.{destPath}\")\r\n",
 					"display(dfTest)"
 				],
-				"execution_count": 86
+				"execution_count": 99
 			}
 		]
 	}
